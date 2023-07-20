@@ -30,7 +30,7 @@ int DFRobot_VisualRotaryEncoder::begin(void)
     return ERR_IC_VERSION;
   }
 
-  delay(200);
+  usleep(20000);
   DBG("begin ok!");
   return NO_ERR;
 }
@@ -92,59 +92,58 @@ bool DFRobot_VisualRotaryEncoder::detectButtonDown(void) {
 
 /************ Initialization of I2C interfaces reading and writing ***********/
 
-DFRobot_VisualRotaryEncoder_I2C::DFRobot_VisualRotaryEncoder_I2C(uint8_t i2cAddr, TwoWire *pWire)
+DFRobot_VisualRotaryEncoder_I2C::DFRobot_VisualRotaryEncoder_I2C(uint8_t i2cAddr, int bus)
 {
-  _deviceAddr = i2cAddr;
-  _pWire = pWire;
+  if(initI2C_RW(bus, i2cAddr, -1))
+	  fprintf(stderr, "Error initialising sensor on bus %d, addr %#x\n", i2cAddr, bus);
 }
 
 int DFRobot_VisualRotaryEncoder_I2C::begin(void)
 {
-  _pWire->begin();   // Wire.h（I2C）library function initialize wire library
-  delay(50);
-
   return DFRobot_VisualRotaryEncoder::begin();   // Use the initialization function of the parent class
 }
 
+#include <string.h>
+
 void DFRobot_VisualRotaryEncoder_I2C::writeReg(uint8_t reg, const void* pBuf, size_t size)
 {
-  if(pBuf == NULL){
+  if(NULL == pBuf){
     DBG("pBuf ERROR!! : null pointer");
   }
-  uint8_t * _pBuf = (uint8_t *)pBuf;
-
-  _pWire->beginTransmission(_deviceAddr);
-  _pWire->write(reg);
-
-  for(size_t i = 0; i < size; i++){
-    _pWire->write(_pBuf[i]);
-  }
-
-  _pWire->endTransmission();
+  char buf[1 + size];
+  buf[0] = reg;
+  memcpy(buf + 1, pBuf, size);
+  if(write(i2C_file, buf, sizeof(buf)) != sizeof(buf))
+    fprintf(stderr, "Failed to write register %d on I2c sensor\n", reg);
 }
 
 size_t DFRobot_VisualRotaryEncoder_I2C::readReg(uint8_t reg, void* pBuf, size_t size)
 {
-  size_t count = 0;
   if(NULL == pBuf){
     DBG("pBuf ERROR!! : null pointer");
   }
-  uint8_t * _pBuf = (uint8_t*)pBuf;
+  i2c_char_t outbuf = reg;
+  struct i2c_rdwr_ioctl_data packets;
+  struct i2c_msg messages[2];
 
-  _pWire->beginTransmission(_deviceAddr);
-  _pWire -> write(reg);
-  if(0 != _pWire->endTransmission()){
-    // Used Wire.endTransmission() to end a slave transmission started by beginTransmission() and arranged by write().
-    DBG("endTransmission ERROR!!");
-  }else{
-    // Master device requests size bytes from slave device, which can be accepted by master device with read() or available()
-    _pWire->requestFrom( _deviceAddr, (uint8_t)size );
+  /* Reading a register involves a repeated start condition which needs ioctl() */
+  messages[0].addr  = i2C_address;
+  messages[0].flags = 0;
+  messages[0].len   = sizeof(outbuf);
+  messages[0].buf   = &outbuf;
 
-    while (_pWire->available()){
-      _pBuf[count++] = _pWire->read();   // Use read() to receive and put into buf
-      // DBG(_pBuf[count-1], HEX);
-    }
+  /* The data will get returned in this structure */
+  messages[1].addr  = i2C_address;
+  messages[1].flags = I2C_M_RD/* | I2C_M_NOSTART*/;
+  messages[1].len   = size;
+  messages[1].buf   = (uint8_t*)pBuf;
+
+  /* Send the request to the kernel and get the result back */
+  packets.msgs      = messages;
+  packets.nmsgs     = 2;
+  if(ioctl(i2C_file, I2C_RDWR, &packets) < 0) {
+      fprintf(stderr, "Failed to read register %d on I2c sensor\n", reg);
+      return -1;
   }
-
-  return count;
+  return size;
 }

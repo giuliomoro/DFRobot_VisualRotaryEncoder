@@ -11,9 +11,8 @@
  */
 #ifndef __DFROBOT_VISUAL_ROTARY_ENCODER_H__
 #define __DFROBOT_VISUAL_ROTARY_ENCODER_H__
-
-#include <Arduino.h>
-#include <Wire.h>
+#include <stdint.h>
+#include <stddef.h>
 
 // #define ENABLE_DBG   //!< open this macro and you can see the details of the program
 #ifdef ENABLE_DBG
@@ -156,17 +155,18 @@ public:
 
 /***************** I2C initialization, read and write ******************************/
 
-class DFRobot_VisualRotaryEncoder_I2C:public DFRobot_VisualRotaryEncoder
+#include <I2c.h>
+class DFRobot_VisualRotaryEncoder_I2C:public DFRobot_VisualRotaryEncoder, public I2c
 {
 public:
   /**
    * @fn DFRobot_VisualRotaryEncoder_I2C
    * @brief constructor, configure sensor I2C communication address according to module DIP switch status
    * @param i2cAddr RotaryEncoder I2C communication address
-   * @param pWire  Wire object is defined in Wire.h, so just use &Wire and the methods in Wire can be pointed to and used
+   * @param bus the I2C bus number
    * @return None
    */
-  DFRobot_VisualRotaryEncoder_I2C(uint8_t i2cAddr=VISUAL_ROTARY_ENCODER_DEFAULT_I2C_ADDR, TwoWire *pWire = &Wire);
+  DFRobot_VisualRotaryEncoder_I2C(uint8_t i2cAddr=VISUAL_ROTARY_ENCODER_DEFAULT_I2C_ADDR, int bus=1);
 
   /**
    * @fn begin
@@ -199,10 +199,6 @@ protected:
    * @return return data length, returning 0 means reading failed
    */
   virtual size_t readReg(uint8_t reg, void* pBuf, size_t size);
-
-private:
-  TwoWire *_pWire;   // pointer to I2C communication method
-  uint8_t _deviceAddr;   // I2C communication device address
 };
 
 #endif
